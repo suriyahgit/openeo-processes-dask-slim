@@ -542,3 +542,79 @@ def test_apply_kernel_dataset(temporal_interval, bounding_box, random_raster_dat
     for var_name in output_cube.data_vars:
         assert isinstance(output_cube[var_name].data, da.Array)
     xr.testing.assert_equal(output_cube, input_cube)
+
+
+@pytest.mark.parametrize("size", [(6, 5, 4, 4)])
+@pytest.mark.parametrize("dtype", [np.float32])
+def test_apply_dimension_preserves_coords(
+    temporal_interval, bounding_box, random_raster_data, process_registry
+):
+    """P0.1: apply_dimension over real dimensions preserves coordinate labels."""
+    input_cube = create_fake_rastercube(
+        data=random_raster_data,
+        spatial_extent=bounding_box,
+        temporal_extent=temporal_interval,
+        bands=["B02", "B03", "B04", "B08"],
+        backend="numpy",
+        as_dataset=True,
+    )
+    _process = partial(
+        process_registry["add"].implementation,
+        y=0,
+        x=ParameterReference(from_parameter="data"),
+    )
+    result = apply_dimension(data=input_cube, process=_process, dimension="t")
+    for var_name in input_cube.data_vars:
+        np.testing.assert_array_equal(
+            result[var_name].coords["t"].values,
+            input_cube[var_name].coords["t"].values,
+        )
+        np.testing.assert_array_equal(
+            result[var_name].coords["x"].values,
+            input_cube[var_name].coords["x"].values,
+        )
+
+
+@pytest.mark.parametrize("size", [(6, 5, 4, 4)])
+@pytest.mark.parametrize("dtype", [np.float32])
+def test_apply_dimension_bands_reordering(
+    temporal_interval, bounding_box, random_raster_data, process_registry
+):
+    """P0.2: apply_dimension over bands with reordering callback preserves correct labels."""
+    input_cube = create_fake_rastercube(
+        data=random_raster_data,
+        spatial_extent=bounding_box,
+        temporal_extent=temporal_interval,
+        bands=["B02", "B03", "B04", "B08"],
+        backend="numpy",
+        as_dataset=True,
+    )
+
+    def reverse_bands(data, axis=None, keepdims=False, **kwargs):
+        return np.take(data, [3, 2, 1, 0], axis=axis)
+
+    result = apply_dimension(data=input_cube, process=reverse_bands, dimension="bands")
+    assert list(result.data_vars) == ["B08", "B04", "B03", "B02"]
+
+
+@pytest.mark.parametrize("size", [(6, 5, 4, 4)])
+@pytest.mark.parametrize("dtype", [np.float32])
+def test_apply_dimension_bands_select_first(
+    temporal_interval, bounding_box, random_raster_data, process_registry
+):
+    """P0.2: apply_dimension over bands selecting subset preserves correct labels."""
+    input_cube = create_fake_rastercube(
+        data=random_raster_data,
+        spatial_extent=bounding_box,
+        temporal_extent=temporal_interval,
+        bands=["B02", "B03", "B04", "B08"],
+        backend="numpy",
+        as_dataset=True,
+    )
+
+    def take_first(data, axis=None, keepdims=False, **kwargs):
+        return np.take(data, [0], axis=axis)
+
+    result = apply_dimension(data=input_cube, process=take_first, dimension="bands")
+    assert list(result.data_vars) == ["B02"]
+    assert result["B02"].attrs == input_cube["B02"].attrs

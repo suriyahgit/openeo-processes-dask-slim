@@ -69,6 +69,7 @@ def merge_cubes(
         )
 
     if isinstance(cube1, xr.Dataset):
+        cube1, cube2 = _align_coordinates(cube1, cube2)
         vars1 = set(cube1.data_vars)
         vars2 = set(cube2.data_vars)
         in_both = vars1 & vars2

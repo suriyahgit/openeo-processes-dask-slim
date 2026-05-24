@@ -119,7 +119,7 @@ def rename_dimension(
     """
     Parameters
     ----------
-    data : xr.DataArray
+    data : xr.Dataset
        A data cube.
     source : str
        The current name of the dimension.
@@ -129,7 +129,7 @@ def rename_dimension(
        Fails with a DimensionExists exception if a dimension with the specified name exists.
     Returns
     -------
-    xr.DataArray :
+    xr.Dataset :
        A data cube with the same dimensions,
        but the name of one of the dimensions changes.
        The old name can not be referred to any longer.

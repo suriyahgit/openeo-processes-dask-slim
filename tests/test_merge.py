@@ -349,3 +349,22 @@ def test_merge_cubes_preserves_dask(
     merged = merge_cubes(cube1, cube2)
     for var in merged.data_vars.values():
         assert isinstance(var.data, dask.array.Array)
+
+
+def test_merge_cubes_disjoint_coords_alignment():
+    """P0.3: merge_cubes aligns float coordinates for disjoint variables."""
+    ds1 = xr.Dataset(
+        {"B02": xr.DataArray(np.ones((2,)), dims=["x"], coords={"x": [0.0, 1.0]})}
+    )
+    ds2 = xr.Dataset(
+        {
+            "B03": xr.DataArray(
+                np.ones((2,)) * 2, dims=["x"], coords={"x": [1e-7, 1.0000001]}
+            )
+        }
+    )
+    result = merge_cubes(ds1, ds2)
+    assert list(result.data_vars) == ["B02", "B03"]
+    assert len(result["x"]) == 2, f"Expected 2 coords, got {len(result['x'])}"
+    np.testing.assert_allclose(result["x"].values, [0.0, 1.0], atol=1e-6)
+    assert not result["B03"].isnull().any(), "B03 should not have NaN after alignment"

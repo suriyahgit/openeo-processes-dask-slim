@@ -148,3 +148,33 @@ def test_predict_random_forest_dask(
     assert isinstance(result, xr.Dataset)
     assert "result" in result.data_vars
     assert isinstance(result["result"].data, dask.array.Array)
+
+
+def test_fit_curve_preserves_dask_laziness(temporal_interval, bounding_box):
+    """P1.1: fit_curve preserves dask laziness (no eager .persist())."""
+    np.random.seed(42)
+    data = np.random.rand(6, 5, 10, 3).astype(np.float64)
+    origin_cube = create_fake_rastercube(
+        data=data,
+        spatial_extent=bounding_box,
+        temporal_extent=temporal_interval,
+        bands=["B02", "B03", "B04"],
+        backend="dask",
+        as_dataset=True,
+    )
+
+    def fitFunction(x, parameters):
+        t0 = 2 * np.pi / 31557600 * x
+        return parameters[0] + parameters[1] * np.cos(t0)
+
+    parameters = [1, 0]
+    result = fit_curve(
+        origin_cube, parameters=parameters, function=fitFunction, dimension="t"
+    )
+    assert isinstance(result, xr.Dataset)
+    for var_name in result.data_vars:
+        var = result[var_name]
+        assert isinstance(var.data, dask.array.Array)
+        # Verify the dask graph has not been eagerly computed
+        graph = var.data.__dask_graph__()
+        assert len(graph) > 0, f"Dask graph for {var_name} is empty (was computed)"

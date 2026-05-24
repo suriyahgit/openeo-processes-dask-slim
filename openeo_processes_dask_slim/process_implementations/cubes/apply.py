@@ -7,6 +7,7 @@ import xarray as xr
 
 from openeo_processes_dask_slim.process_implementations.cubes.utils import (
     _capture_var_metadata,
+    _detect_band_permutation,
     _restore_var_metadata,
 )
 from openeo_processes_dask_slim.process_implementations.data_model import RasterCube
@@ -75,11 +76,25 @@ def apply_dimension(
         )
         if isinstance(result, xr.DataArray) and dimension in result.dims:
             out_len = len(result[dimension])
-            if out_len <= len(original_band_labels):
+            if out_len == len(original_band_labels):
+                permuted = _detect_band_permutation(
+                    result, reordered_band_array, dimension
+                )
+                if permuted is not None:
+                    labels = permuted
+                    meta["order"] = permuted
+                else:
+                    labels = list(original_band_labels)
+                try:
+                    result = result.assign_coords({dimension: labels})
+                except ValueError:
+                    pass
+            elif out_len < len(original_band_labels):
                 try:
                     result = result.assign_coords(
                         {dimension: original_band_labels[:out_len]}
                     )
+                    meta["order"] = list(original_band_labels[:out_len])
                 except ValueError:
                     pass
             result = result.to_dataset(dim=dimension)
@@ -155,7 +170,7 @@ def apply_dimension(
         # dimension labels preserved
         # if the number of source dimension's values is equal to the number of computed values
         if len(reordered_data[dimension]) == result_len:
-            reordered_result[dimension] == reordered_data[dimension].values
+            reordered_result[dimension] = reordered_data[dimension].values
         else:
             reordered_result[dimension] = np.arange(result_len)
     elif target_dimension in reordered_result.dims:
