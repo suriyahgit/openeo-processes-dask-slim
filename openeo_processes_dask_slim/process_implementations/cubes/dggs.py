@@ -479,38 +479,94 @@ def apply_neighborhood_dggs(
     for var_name in data.data_vars:
         src = data[var_name]
 
+        pix_dim = f"{dggs_dim}_pixel"
+        nbr_idx_da = xr.DataArray(
+            neighbor_matrix, dims=[pix_dim, "nbr"],
+        )
+        valid = xr.DataArray(
+            neighbor_matrix >= 0, dims=[pix_dim, "nbr"],
+        )
+
+        other_dims = tuple(d for d in src.dims if d != dggs_dim)
+        flat_indices = neighbor_matrix.ravel().copy()
+        flat_indices[flat_indices < 0] = 0
+        idx_da = xr.DataArray(flat_indices, dims="flat")
+
+        flat_gathered = src.isel(**{dggs_dim: idx_da})
+        gathered = flat_gathered.data.reshape(
+            *[src.sizes[d] for d in other_dims], n_pix, max_nbrs
+        )
+        valid_mask = neighbor_matrix >= 0
+
+        def _process_block(block, valid_mask=neighbor_matrix >= 0):
+            out = np.empty(block.shape[:-1])
+            out[:] = np.nan
+            for i in range(block.shape[-2]):
+                vals = block[..., i, :]
+                valid_vals = vals[valid_mask[i]]
+                if valid_vals.size > 0:
+                    out[..., i] = process(
+                        valid_vals,
+                        positional_parameters=positional_parameters,
+                        named_parameters=named_parameters,
+                    )
+            return out
+
+    result_vars = {}
+    for var_name in data.data_vars:
+        src = data[var_name]
+
         flat_indices = neighbor_matrix.ravel().copy()
         flat_indices[flat_indices < 0] = 0
         idx_da = xr.DataArray(flat_indices, dims="flat")
         flat_gathered = src.isel(**{dggs_dim: idx_da})
 
-        non_dggs = tuple(d for d in flat_gathered.dims if d != "flat")
-        non_dggs_sizes = tuple(flat_gathered.sizes[d] for d in non_dggs)
-        gathered_np = flat_gathered.compute().values.reshape(
-            *non_dggs_sizes, n_pix, max_nbrs
-        )
+        other_dims = tuple(d for d in flat_gathered.dims if d != "flat")
+        other_sizes = tuple(flat_gathered.sizes[d] for d in other_dims)
 
         valid_mask = neighbor_matrix >= 0
-        reduced_data = np.zeros(non_dggs_sizes + (n_pix,))
-        for i in range(n_pix):
-            vals = gathered_np[..., i, :][..., valid_mask[i]]
-            val_flat = vals.ravel()
-            result_val = process(
-                val_flat,
-                positional_parameters=positional_parameters,
-                named_parameters=named_parameters,
-            )
-            reduced_data[..., i] = result_val
+        n_total = n_pix * max_nbrs
 
-        dims = non_dggs + (dggs_dim,)
+        def _apply_on_chunk(chunk, vmask=valid_mask, n_pix=n_pix, mbrs=max_nbrs):
+            flat = chunk.reshape(-1, n_total)
+            result = np.empty((flat.shape[0], n_pix), dtype=float)
+            for pix_i in range(n_pix):
+                start = pix_i * mbrs
+                end = start + mbrs
+                vals = flat[:, start:end]
+                v = vals[:, vmask[pix_i]]
+                out_vals = np.empty(flat.shape[0], dtype=float)
+                out_vals[:] = np.nan
+                for t in range(flat.shape[0]):
+                    row = v[t, :]
+                    row = row[~np.isnan(row)]
+                    if row.size > 0:
+                        out_vals[t] = process(
+                            row,
+                            positional_parameters=positional_parameters,
+                            named_parameters=named_parameters,
+                        )
+                result[:, pix_i] = out_vals
+            return result.reshape(*chunk.shape[:-1], n_pix)
+
+        result_data = xr.apply_ufunc(
+            _apply_on_chunk,
+            flat_gathered.chunk({"flat": -1}),
+            input_core_dims=[["flat"]],
+            output_core_dims=[[dggs_dim]],
+            dask="parallelized",
+            output_dtypes=[float],
+            output_sizes={dggs_dim: n_pix},
+        )
+
+        dims = other_dims + (dggs_dim,)
         coords = {}
-        for d in non_dggs:
+        for d in other_dims:
             if d in src.coords:
                 coords[d] = src.coords[d]
         coords[dggs_dim] = src.coords[dggs_dim]
 
-        reduced = xr.DataArray(reduced_data, dims=dims, coords=coords)
-        result_vars[var_name] = reduced
+        result_vars[var_name] = result_data
 
     result = xr.Dataset(result_vars, coords=data.coords, attrs=data.attrs)
     return result

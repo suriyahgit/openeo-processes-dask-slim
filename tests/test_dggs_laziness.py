@@ -135,10 +135,4 @@ class TestLaziness:
             return np.mean(data)
 
         result = apply_neighborhood_dggs(dask_cube, _mean, k=1)
-        assert isinstance(result, xr.Dataset), f"Expected Dataset, got {type(result)}"
-        for var_name in result.data_vars:
-            if not isinstance(result[var_name].data, da.Array):
-                pytest.skip(
-                    f"apply_neighborhood_dggs computes internally "
-                    f"(per-pixel callback), variable '{var_name}' is {type(result[var_name].data)}"
-                )
+        _assert_dask_preserved(result)
