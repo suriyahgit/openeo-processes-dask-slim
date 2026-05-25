@@ -96,7 +96,9 @@ def test_resample_cube_spatial(
     output_crs, output_res, temporal_interval, bounding_box, random_raster_data
 ):
     if str(output_crs) == "4326":
-        pytest.skip("CRS identity reprojection known issue in ODC with this environment")
+        pytest.skip(
+            "CRS identity reprojection known issue in ODC with this environment"
+        )
     """Test to ensure resolution gets changed correctly."""
     input_cube = create_fake_rastercube(
         data=random_raster_data,
