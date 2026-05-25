@@ -654,10 +654,10 @@ def test_reduce_dimension(
         ignore_nodata=True,
     )
     for name in band_names[:2]:
-        data = input_cube[name].values
+        data = input_cube[name].values.copy()
         data[0, :, :] = np.nan
         input_cube[name] = (input_cube[name].dims, data)
-    data = input_cube[band_names[2]].values
+    data = input_cube[band_names[2]].values.copy()
     data[0, :, :] = 1
     input_cube[band_names[2]] = (input_cube[band_names[2]].dims, data)
     output_cube = reduce_dimension(data=input_cube, reducer=_process, dimension="bands")
@@ -669,7 +669,7 @@ def test_reduce_dimension(
     )
     xr.testing.assert_equal(output_cube, xr.ones_like(output_cube))
 
-    data = input_cube[band_names[0]].values
+    data = input_cube[band_names[0]].values.copy()
     data[0, 0, 0] = 999999
     input_cube[band_names[0]] = (input_cube[band_names[0]].dims, data)
     _process = partial(

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-specs_path = Path() / "openeo_processes_dask_slim/specs/openeo-processes"
+specs_path = Path(__file__).parent.parent / "openeo_processes_dask_slim/specs/openeo-processes"
 
 
 def test_specs():

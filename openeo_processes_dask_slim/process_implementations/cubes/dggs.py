@@ -481,10 +481,12 @@ def apply_neighborhood_dggs(
 
         pix_dim = f"{dggs_dim}_pixel"
         nbr_idx_da = xr.DataArray(
-            neighbor_matrix, dims=[pix_dim, "nbr"],
+            neighbor_matrix,
+            dims=[pix_dim, "nbr"],
         )
         valid = xr.DataArray(
-            neighbor_matrix >= 0, dims=[pix_dim, "nbr"],
+            neighbor_matrix >= 0,
+            dims=[pix_dim, "nbr"],
         )
 
         other_dims = tuple(d for d in src.dims if d != dggs_dim)
