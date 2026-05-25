@@ -12,10 +12,15 @@ import xarray as xr
 from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 
 from openeo_processes_dask_slim.process_implementations.data_model import RasterCube
+from openeo_processes_dask_slim.process_implementations.cubes.dggs import (
+    get_dggs_dim,
+    is_dggs_cube,
+)
 from openeo_processes_dask_slim.process_implementations.exceptions import (
     BandFilterParameterMissing,
     DimensionMissing,
     DimensionNotAvailable,
+    NoDataAvailable,
     TemporalExtentEmpty,
     TooManyDimensions,
 )
@@ -30,6 +35,7 @@ __all__ = [
     "filter_temporal",
     "filter_bands",
     "filter_bbox",
+    "filter_spatial",
 ]
 
 
@@ -169,6 +175,16 @@ def filter_bands(data: RasterCube, bands: list[str] = None) -> RasterCube:
 
 
 def filter_bbox(data: RasterCube, extent: BoundingBox) -> RasterCube:
+    y_dim = data.openeo.y_dim
+    x_dim = data.openeo.x_dim
+
+    if y_dim is None and x_dim is None:
+        if is_dggs_cube(data):
+            return _filter_bbox_dggs(data, extent)
+        raise DimensionNotAvailable(
+            "No spatial dimensions available, can't apply filter_bbox."
+        )
+
     try:
         odc_crs = data.odc.crs
         if odc_crs is not None:
@@ -181,14 +197,6 @@ def filter_bbox(data: RasterCube, extent: BoundingBox) -> RasterCube:
         reprojected_extent = _reproject_bbox(extent, input_crs)
     else:
         reprojected_extent = extent
-    y_dim = data.openeo.y_dim
-    x_dim = data.openeo.x_dim
-
-    # Check first if the data has some spatial dimensions:
-    if y_dim is None and x_dim is None:
-        raise DimensionNotAvailable(
-            "No spatial dimensions available, can't apply filter_bbox."
-        )
 
     if y_dim is not None:
         # Check if the coordinates are increasing or decreasing
@@ -235,6 +243,48 @@ def filter_bbox(data: RasterCube, extent: BoundingBox) -> RasterCube:
     return aoi
 
 
+def _filter_bbox_dggs(data: RasterCube, extent: BoundingBox) -> RasterCube:
+    dggs_dim = get_dggs_dim(data)
+
+    if "lon" not in data.coords or "lat" not in data.coords:
+        raise DimensionNotAvailable(
+            "DGGS cube must have 'lat' and 'lon' coordinates over the cell dimension "
+            "for filter_bbox spatial filtering."
+        )
+
+    lon = np.asarray(data["lon"].data)
+    lat = np.asarray(data["lat"].data)
+
+    if extent.crs is not None and not pyproj.crs.CRS(extent.crs).equals("EPSG:4326"):
+        transformer = pyproj.Transformer.from_crs(
+            extent.crs, "EPSG:4326", always_xy=True
+        )
+        sw_lon, sw_lat = transformer.transform(extent.west, extent.south)
+        ne_lon, ne_lat = transformer.transform(extent.east, extent.north)
+        west, south = min(sw_lon, ne_lon), min(sw_lat, ne_lat)
+        east, north = max(sw_lon, ne_lon), max(sw_lat, ne_lat)
+    else:
+        west, south = extent.west, extent.south
+        east, north = extent.east, extent.north
+
+    if west <= east:
+        lon_mask = (lon >= west) & (lon <= east)
+    else:
+        lon_mask = (lon >= west) | (lon <= east)
+
+    lat_mask = (lat >= south) & (lat <= north)
+    mask = lon_mask & lat_mask
+
+    indices = np.where(mask)[0]
+
+    if len(indices) == 0:
+        raise NoDataAvailable(
+            "No DGGS cells intersect the specified bounding box."
+        )
+
+    return data.isel(**{dggs_dim: indices})
+
+
 def _reproject_bbox(extent: BoundingBox, target_crs: str) -> BoundingBox:
     bbox_points = [
         [extent.south, extent.west],
@@ -270,3 +320,132 @@ def _reproject_bbox(extent: BoundingBox, target_crs: str) -> BoundingBox:
         crs=target_crs,
     )
     return reprojected_extent
+
+
+def filter_spatial(data: RasterCube, geometries: dict) -> RasterCube:
+    if is_dggs_cube(data):
+        return _filter_spatial_dggs(data, geometries)
+
+    y_dim = data.openeo.y_dim
+    x_dim = data.openeo.x_dim
+
+    if y_dim is None or x_dim is None:
+        raise DimensionNotAvailable(
+            "Planar spatial dimensions (x, y) not found on data cube."
+        )
+
+    if isinstance(geometries, dict):
+        gdf = gpd.GeoDataFrame.from_features(geometries, crs="EPSG:4326")
+    else:
+        gdf = gpd.GeoDataFrame(geometries, crs="EPSG:4326")
+
+    if gdf.crs is not None:
+        try:
+            odc_crs = data.odc.crs
+        except Exception:
+            odc_crs = data.attrs.get("crs", None)
+        if odc_crs is not None and not pyproj.crs.CRS(str(gdf.crs)).equals(odc_crs):
+            gdf = gdf.to_crs(odc_crs)
+
+    union_geom = gdf.geometry.unary_union
+    if union_geom is None or union_geom.is_empty:
+        raise NoDataAvailable("Empty geometry provided to filter_spatial.")
+
+    bounds = union_geom.bounds
+    x_coords = np.asarray(data[x_dim].data)
+    y_coords = np.asarray(data[y_dim].data)
+
+    x_mask = (x_coords >= bounds[0]) & (x_coords <= bounds[2])
+    y_mask = (y_coords >= bounds[1]) & (y_coords <= bounds[3])
+    bbox_sel = data.isel(
+        **{x_dim: np.where(x_mask)[0], y_dim: np.where(y_mask)[0]}
+    )
+
+    xx, yy = np.meshgrid(
+        np.asarray(bbox_sel[x_dim].data),
+        np.asarray(bbox_sel[y_dim].data),
+    )
+    points = np.column_stack([xx.ravel(), yy.ravel()])
+    point_geoms = [shapely.geometry.Point(p[0], p[1]) for p in points]
+    inside = np.array(
+        [union_geom.contains(p) for p in point_geoms]
+    ).reshape(xx.shape)
+
+    if not inside.any():
+        raise NoDataAvailable(
+            "No pixels intersect the specified geometries."
+        )
+
+    result = bbox_sel.where(
+        xr.DataArray(inside, dims=(y_dim, x_dim)), drop=True
+    )
+
+    return result
+
+
+def _load_geometries_dggs(geometries: dict):
+    if isinstance(geometries, dict):
+        geom_type = geometries.get("type", None)
+        if geom_type == "FeatureCollection":
+            gdf = gpd.GeoDataFrame.from_features(geometries, crs="EPSG:4326")
+        elif geom_type == "Feature":
+            gdf = gpd.GeoDataFrame.from_features(
+                {"type": "FeatureCollection", "features": [geometries]},
+                crs="EPSG:4326",
+            )
+        elif geom_type in ("Polygon", "MultiPolygon"):
+            gdf = gpd.GeoDataFrame(
+                geometry=[shapely.geometry.shape(geometries)], crs="EPSG:4326"
+            )
+        else:
+            raise ValueError(f"Unsupported GeoJSON type: {geom_type}")
+    else:
+        raise ValueError("Geometries must be a GeoJSON dict.")
+    return gdf
+
+
+def _filter_spatial_dggs(data: RasterCube, geometries: dict) -> RasterCube:
+    dggs_dim = get_dggs_dim(data)
+
+    if "lon" not in data.coords or "lat" not in data.coords:
+        raise DimensionNotAvailable(
+            "DGGS cube must have 'lat' and 'lon' coordinates "
+            "for filter_spatial."
+        )
+
+    gdf = _load_geometries_dggs(geometries)
+
+    if gdf.crs is not None and not pyproj.crs.CRS(str(gdf.crs)).equals("EPSG:4326"):
+        gdf = gdf.to_crs("EPSG:4326")
+
+    union_geom = gdf.geometry.unary_union
+    if union_geom is None or union_geom.is_empty:
+        raise NoDataAvailable("Empty geometry provided to filter_spatial.")
+
+    lon = np.asarray(data["lon"].data)
+    lat = np.asarray(data["lat"].data)
+
+    bounds = union_geom.bounds
+    bbox_mask = (
+        (lon >= bounds[0]) & (lon <= bounds[2])
+        & (lat >= bounds[1]) & (lat <= bounds[3])
+    )
+    bbox_indices = np.where(bbox_mask)[0]
+
+    if len(bbox_indices) == 0:
+        raise NoDataAvailable(
+            "No DGGS cells intersect the specified geometries."
+        )
+
+    contained = np.array([
+        union_geom.contains(shapely.geometry.Point(lon[i], lat[i]))
+        for i in bbox_indices
+    ])
+    final_indices = bbox_indices[contained]
+
+    if len(final_indices) == 0:
+        raise NoDataAvailable(
+            "No DGGS cells intersect the specified geometries."
+        )
+
+    return data.isel(**{dggs_dim: final_indices})

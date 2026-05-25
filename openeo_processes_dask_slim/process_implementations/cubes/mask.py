@@ -18,7 +18,12 @@ from openeo_processes_dask_slim.process_implementations.logic import _not
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["mask"]
+from openeo_processes_dask_slim.process_implementations.cubes.dggs import (
+    is_dggs_cube,
+    mask_polygon_dggs,
+)
+
+__all__ = ["mask", "mask_polygon"]
 
 
 def _mask_dataset(data: xr.Dataset, mask: RasterCube, replacement) -> xr.Dataset:
@@ -193,3 +198,19 @@ def mask(data: RasterCube, mask: RasterCube, replacement=None) -> RasterCube:
         data = data.transpose(*original_dim_order)
 
     return data
+
+
+def mask_polygon(
+    data: RasterCube,
+    mask: dict,
+    replacement=None,
+    inside: bool = False,
+) -> RasterCube:
+    if is_dggs_cube(data):
+        return mask_polygon_dggs(
+            data, mask, replacement=replacement, inside=inside
+        )
+
+    raise NotImplementedError(
+        "mask_polygon for planar x/y cubes is not yet implemented."
+    )

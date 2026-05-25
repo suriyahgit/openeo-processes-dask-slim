@@ -22,7 +22,12 @@ from openeo_processes_dask_slim.process_implementations.exceptions import (
     TooManyDimensions,
 )
 
-__all__ = ["aggregate_temporal", "aggregate_temporal_period"]
+from openeo_processes_dask_slim.process_implementations.cubes.dggs import (
+    get_dggs_dim,
+    is_dggs_cube,
+)
+
+__all__ = ["aggregate_temporal", "aggregate_temporal_period", "aggregate_spatial"]
 
 logger = logging.getLogger(__name__)
 
@@ -254,3 +259,123 @@ def aggregate_temporal_period(
         return aggregate_temporal(
             data=data, intervals=intervals, reducer=reducer, labels=labels
         )
+
+
+def _load_geometries_for_aggregate(geometries):
+    import geopandas as gpd
+
+    if isinstance(geometries, dict):
+        geom_type = geometries.get("type", None)
+        if geom_type == "FeatureCollection":
+            gdf = gpd.GeoDataFrame.from_features(geometries, crs="EPSG:4326")
+        elif geom_type == "Feature":
+            gdf = gpd.GeoDataFrame.from_features(
+                {"type": "FeatureCollection", "features": [geometries]},
+                crs="EPSG:4326",
+            )
+        elif geom_type in ("Polygon", "MultiPolygon"):
+            gdf = gpd.GeoDataFrame(
+                geometry=[shapely.geometry.shape(geometries)], crs="EPSG:4326"
+            )
+        else:
+            raise ValueError(f"Unsupported GeoJSON type: {geom_type}")
+    else:
+        raise ValueError("Geometries must be a GeoJSON dict.")
+    return gdf
+
+
+def _aggregate_spatial_dggs(
+    data: RasterCube,
+    geometries: dict,
+    reducer: Callable,
+    context: Optional[dict] = None,
+) -> RasterCube:
+    dggs_dim = get_dggs_dim(data)
+
+    if "lon" not in data.coords or "lat" not in data.coords:
+        raise DimensionNotAvailable(
+            "DGGS cube must have 'lat' and 'lon' coordinates for aggregate_spatial."
+        )
+
+    gdf = _load_geometries_for_aggregate(geometries)
+    lon = np.asarray(data["lon"].data)
+    lat = np.asarray(data["lat"].data)
+
+    result_bands = {}
+    for geom_idx, (_, row) in enumerate(gdf.iterrows()):
+        geom = row.geometry
+        if geom is None or geom.is_empty:
+            continue
+
+        bounds = geom.bounds
+        bbox_mask = (
+            (lon >= bounds[0]) & (lon <= bounds[2])
+            & (lat >= bounds[1]) & (lat <= bounds[3])
+        )
+        bbox_indices = np.where(bbox_mask)[0]
+
+        if len(bbox_indices) == 0:
+            continue
+
+        contained = np.array([
+            geom.contains(shapely.geometry.Point(lon[i], lat[i]))
+            for i in bbox_indices
+        ])
+        cell_indices = bbox_indices[contained]
+
+        if len(cell_indices) == 0:
+            continue
+
+        cell_data = data.isel(**{dggs_dim: cell_indices})
+        positional_parameters = {"data": 0}
+        aggregated = cell_data.reduce(
+            reducer,
+            dim=dggs_dim,
+            keep_attrs=False,
+            positional_parameters=positional_parameters,
+            context=context,
+        )
+
+        for var_name in aggregated.data_vars:
+            if var_name not in result_bands:
+                result_bands[var_name] = []
+            result_bands[var_name].append(aggregated[var_name])
+
+    if not result_bands:
+        from openeo_processes_dask_slim.process_implementations.exceptions import (
+            NoDataAvailable,
+        )
+
+        raise NoDataAvailable(
+            "No DGGS cells intersect any of the specified geometries."
+        )
+
+    out_vars = {}
+    for var_name, arrays in result_bands.items():
+        if len(arrays) == 1:
+            stacked = arrays[0].expand_dims("geometry")
+        else:
+            stacked = xr.concat(arrays, dim="geometry")
+        out_vars[var_name] = stacked
+
+    n_geom = len(next(iter(result_bands.values())))
+    result = xr.Dataset(
+        data_vars=out_vars,
+        coords={"geometry": np.arange(n_geom)},
+        attrs=data.attrs,
+    )
+    return result
+
+
+def aggregate_spatial(
+    data: RasterCube,
+    geometries: dict,
+    reducer: Callable,
+    context: Optional[dict] = None,
+) -> RasterCube:
+    if is_dggs_cube(data):
+        return _aggregate_spatial_dggs(data, geometries, reducer, context)
+
+    raise NotImplementedError(
+        f"aggregate_spatial for planar x/y cubes is not yet implemented."
+    )

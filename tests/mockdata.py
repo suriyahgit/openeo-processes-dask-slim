@@ -6,6 +6,13 @@ import pandas as pd
 import xarray as xr
 from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 
+try:
+    import astropy_healpix as ah
+
+    HAS_ASTROPY_HEALPIX = True
+except ImportError:
+    HAS_ASTROPY_HEALPIX = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -68,3 +75,64 @@ def create_fake_rastercube(
         raster_cube = raster_cube.to_dataset(dim="bands")
 
     return raster_cube
+
+
+def create_fake_healpix_cube(
+    nside=2,
+    n_times=3,
+    n_bands=1,
+    band_names=None,
+    seed=42,
+    backend="numpy",
+    chunks=("auto", -1),
+):
+    if not HAS_ASTROPY_HEALPIX:
+        raise ImportError(
+            "astropy-healpix is required to create synthetic HEALPix cubes. "
+            "Install it with: pip install astropy-healpix"
+        )
+
+    rng = np.random.default_rng(seed)
+    npix = ah.nside_to_npix(nside)
+    healpix_indices = np.arange(npix)
+
+    lon_rad, lat_rad = ah.healpix_to_lonlat(
+        healpix_indices, nside, order="ring"
+    )
+    lat_vals = np.rad2deg(np.asarray(lat_rad))
+    lon_vals = np.rad2deg(np.asarray(lon_rad))
+
+    t_coords = pd.date_range(start="2020-01-01", periods=n_times, freq="D").values
+
+    if band_names is None:
+        band_names = [f"band_{i}" for i in range(n_bands)]
+
+    data_vars = {}
+    for band_name in band_names:
+        shape = (n_times, npix)
+        band_data = rng.random(shape)
+        if "dask" in backend:
+            import dask.array as da
+
+            band_data = da.from_array(band_data, chunks=chunks)
+        data_vars[band_name] = xr.Variable(
+            ("t", "healpix_index"),
+            band_data,
+        )
+
+    ds = xr.Dataset(
+        data_vars=data_vars,
+        coords={
+            "t": t_coords,
+            "healpix_index": healpix_indices,
+            "lat": xr.Variable("healpix_index", lat_vals),
+            "lon": xr.Variable("healpix_index", lon_vals),
+        },
+        attrs={
+            "crs": f"healpix:{nside}",
+            "healpix_nside": nside,
+            "healpix_order": "ring",
+        },
+    )
+
+    return ds

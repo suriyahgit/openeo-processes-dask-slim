@@ -19,6 +19,25 @@ X_GUESSES = ["x", "lon", "longitude"]
 Y_GUESSES = ["y", "lat", "latitude"]
 BANDS_GUESSES = ["b", "bands", "band"]
 
+DGGS_DIM_ATTR = "dggs_cell_id_dim"
+HEALPIX_DIM_GUESSES = ["healpix_index"]
+
+
+def _detect_dggs_dim(xarray_obj) -> list:
+    attrs = xarray_obj.attrs if hasattr(xarray_obj, "attrs") else {}
+    dggs_dim = attrs.get(DGGS_DIM_ATTR, None)
+    if dggs_dim is not None and dggs_dim in xarray_obj.dims:
+        return [dggs_dim]
+    crs = str(attrs.get("crs", "")).lower()
+    is_legacy_healpix = (
+        crs.startswith("healpix:") or "healpix_nside" in attrs
+    )
+    if is_legacy_healpix:
+        for guess in HEALPIX_DIM_GUESSES:
+            if guess in xarray_obj.dims:
+                return [guess]
+    return []
+
 
 @xr.register_dataarray_accessor("openeo")
 @xr.register_dataset_accessor("openeo")
@@ -39,6 +58,12 @@ class OpenEOExtensionDa:
             for dim in self._obj.dims
             if dim not in self._spatial_dims + self._temporal_dims + self._bands_dims
         ]
+        dggs_dim = _detect_dggs_dim(self._obj)
+        if dggs_dim:
+            self._spatial_dims.extend(dggs_dim)
+            self._other_dims = [
+                d for d in self._other_dims if d not in dggs_dim
+            ]
 
     @property
     def _lowercase_dims(self):

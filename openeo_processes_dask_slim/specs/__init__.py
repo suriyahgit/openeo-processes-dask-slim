@@ -8,8 +8,11 @@ logger = logging.getLogger(__name__)
 
 json_path = Path(__file__).parent / "openeo-processes"
 process_json_paths = [pg_path for pg_path in (json_path).glob("*.json")]
+proposal_path = json_path / "proposals"
+if proposal_path.is_dir():
+    process_json_paths.extend(pg_path for pg_path in proposal_path.glob("*.json"))
 
-# Go through all the jsons in the top-level of the specs folder and add them to be importable from here
+# Go through all the jsons and proposals and add them to be importable from here
 # E.g. from openeo_processes_dask_slim.specs import *
 # This is frowned upon in most python code, but I think here it's fine and allows a nice way of importing these
 
