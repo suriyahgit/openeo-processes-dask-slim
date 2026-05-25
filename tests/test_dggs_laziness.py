@@ -28,6 +28,7 @@ from tests.mockdata import create_fake_healpix_cube
 
 def _build_process_registry():
     from openeo_pg_parser_networkx import Process, ProcessRegistry
+
     import openeo_processes_dask_slim.specs as specs
     from openeo_processes_dask_slim.process_implementations.core import process
 
@@ -83,9 +84,9 @@ def polygon_geom():
 def _assert_dask_preserved(result, input_cube=None):
     assert isinstance(result, xr.Dataset), f"Expected Dataset, got {type(result)}"
     for var_name in result.data_vars:
-        assert isinstance(result[var_name].data, da.Array), (
-            f"Variable '{var_name}' lost dask backing, got {type(result[var_name].data)}"
-        )
+        assert isinstance(
+            result[var_name].data, da.Array
+        ), f"Variable '{var_name}' lost dask backing, got {type(result[var_name].data)}"
 
 
 class TestLaziness:
@@ -132,6 +133,7 @@ class TestLaziness:
     def test_apply_neighborhood_dggs(self, dask_cube):
         def _mean(data, **kwargs):
             return np.mean(data)
+
         result = apply_neighborhood_dggs(dask_cube, _mean, k=1)
         assert isinstance(result, xr.Dataset), f"Expected Dataset, got {type(result)}"
         for var_name in result.data_vars:

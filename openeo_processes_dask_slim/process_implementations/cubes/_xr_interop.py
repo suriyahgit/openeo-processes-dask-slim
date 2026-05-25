@@ -29,9 +29,7 @@ def _detect_dggs_dim(xarray_obj) -> list:
     if dggs_dim is not None and dggs_dim in xarray_obj.dims:
         return [dggs_dim]
     crs = str(attrs.get("crs", "")).lower()
-    is_legacy_healpix = (
-        crs.startswith("healpix:") or "healpix_nside" in attrs
-    )
+    is_legacy_healpix = crs.startswith("healpix:") or "healpix_nside" in attrs
     if is_legacy_healpix:
         for guess in HEALPIX_DIM_GUESSES:
             if guess in xarray_obj.dims:
@@ -61,9 +59,7 @@ class OpenEOExtensionDa:
         dggs_dim = _detect_dggs_dim(self._obj)
         if dggs_dim:
             self._spatial_dims.extend(dggs_dim)
-            self._other_dims = [
-                d for d in self._other_dims if d not in dggs_dim
-            ]
+            self._other_dims = [d for d in self._other_dims if d not in dggs_dim]
 
     @property
     def _lowercase_dims(self):

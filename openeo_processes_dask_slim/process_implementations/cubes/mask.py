@@ -207,9 +207,7 @@ def mask_polygon(
     inside: bool = False,
 ) -> RasterCube:
     if is_dggs_cube(data):
-        return mask_polygon_dggs(
-            data, mask, replacement=replacement, inside=inside
-        )
+        return mask_polygon_dggs(data, mask, replacement=replacement, inside=inside)
 
     raise NotImplementedError(
         "mask_polygon for planar x/y cubes is not yet implemented."

@@ -19,9 +19,10 @@ from tests.mockdata import create_fake_healpix_cube
 
 
 def _build_process_registry():
-    from openeo_processes_dask_slim.process_implementations.core import process
     from openeo_pg_parser_networkx import Process, ProcessRegistry
+
     import openeo_processes_dask_slim.specs as specs
+    from openeo_processes_dask_slim.process_implementations.core import process
 
     registry = ProcessRegistry(wrap_funcs=[process])
     for spec_name, impl_name in (
@@ -108,9 +109,9 @@ class TestReduceSpatialDggs:
         reducer = _reducer("mean")
         result = reduce_spatial(data=cube_dask, reducer=reducer)
         for var_name in result.data_vars:
-            assert isinstance(result[var_name].data, da.Array), (
-                f"Variable {var_name} lost dask backing"
-            )
+            assert isinstance(
+                result[var_name].data, da.Array
+            ), f"Variable {var_name} lost dask backing"
 
 
 class TestAggregateSpatialDggs:
@@ -157,9 +158,9 @@ class TestAggregateSpatialDggs:
             data=cube_dask, geometries=polygon_geometry, reducer=reducer
         )
         for var_name in result.data_vars:
-            assert isinstance(result[var_name].data, da.Array), (
-                f"Variable {var_name} lost dask backing"
-            )
+            assert isinstance(
+                result[var_name].data, da.Array
+            ), f"Variable {var_name} lost dask backing"
 
     def test_empty_geometry_raises(self, cube_numpy):
         reducer = _reducer("mean")
@@ -170,9 +171,7 @@ class TestAggregateSpatialDggs:
             ],
         }
         with pytest.raises(NoDataAvailable):
-            aggregate_spatial(
-                data=cube_numpy, geometries=far_geom, reducer=reducer
-            )
+            aggregate_spatial(data=cube_numpy, geometries=far_geom, reducer=reducer)
 
     def test_single_polygon_geom(self, cube_numpy):
         reducer = _reducer("mean")
@@ -180,9 +179,7 @@ class TestAggregateSpatialDggs:
             "type": "Polygon",
             "coordinates": [[[-45, -45], [-45, 45], [45, 45], [45, -45], [-45, -45]]],
         }
-        result = aggregate_spatial(
-            data=cube_numpy, geometries=geom, reducer=reducer
-        )
+        result = aggregate_spatial(data=cube_numpy, geometries=geom, reducer=reducer)
         assert "geometry" in result.dims
         assert len(result.geometry) == 1
 
@@ -196,7 +193,9 @@ class TestAggregateSpatialDggs:
                     "properties": {},
                     "geometry": {
                         "type": "Polygon",
-                        "coordinates": [[[-1, 14], [-1, 25], [6, 25], [6, 14], [-1, 14]]],
+                        "coordinates": [
+                            [[-1, 14], [-1, 25], [6, 25], [6, 14], [-1, 14]]
+                        ],
                     },
                 },
                 {
@@ -204,14 +203,14 @@ class TestAggregateSpatialDggs:
                     "properties": {},
                     "geometry": {
                         "type": "Polygon",
-                        "coordinates": [[[19, 34], [19, 46], [26, 46], [26, 34], [19, 34]]],
+                        "coordinates": [
+                            [[19, 34], [19, 46], [26, 46], [26, 34], [19, 34]]
+                        ],
                     },
                 },
             ],
         }
-        result = aggregate_spatial(
-            data=cube_numpy, geometries=fc, reducer=reducer
-        )
+        result = aggregate_spatial(data=cube_numpy, geometries=fc, reducer=reducer)
         assert len(result.geometry) == 2
 
     def test_multi_feature_preserves_order(self, cube_numpy):
@@ -224,7 +223,9 @@ class TestAggregateSpatialDggs:
                     "properties": {"name": "a"},
                     "geometry": {
                         "type": "Polygon",
-                        "coordinates": [[[19, 34], [19, 46], [26, 46], [26, 34], [19, 34]]],
+                        "coordinates": [
+                            [[19, 34], [19, 46], [26, 46], [26, 34], [19, 34]]
+                        ],
                     },
                 },
                 {
@@ -232,12 +233,12 @@ class TestAggregateSpatialDggs:
                     "properties": {"name": "b"},
                     "geometry": {
                         "type": "Polygon",
-                        "coordinates": [[[-1, 14], [-1, 25], [6, 25], [6, 14], [-1, 14]]],
+                        "coordinates": [
+                            [[-1, 14], [-1, 25], [6, 25], [6, 14], [-1, 14]]
+                        ],
                     },
                 },
             ],
         }
-        result = aggregate_spatial(
-            data=cube_numpy, geometries=fc, reducer=reducer
-        )
+        result = aggregate_spatial(data=cube_numpy, geometries=fc, reducer=reducer)
         assert len(result.geometry) == 2

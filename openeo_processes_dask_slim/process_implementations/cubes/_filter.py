@@ -11,11 +11,11 @@ import shapely
 import xarray as xr
 from openeo_pg_parser_networkx.pg_schema import BoundingBox, TemporalInterval
 
-from openeo_processes_dask_slim.process_implementations.data_model import RasterCube
 from openeo_processes_dask_slim.process_implementations.cubes.dggs import (
     get_dggs_dim,
     is_dggs_cube,
 )
+from openeo_processes_dask_slim.process_implementations.data_model import RasterCube
 from openeo_processes_dask_slim.process_implementations.exceptions import (
     BandFilterParameterMissing,
     DimensionMissing,
@@ -278,9 +278,7 @@ def _filter_bbox_dggs(data: RasterCube, extent: BoundingBox) -> RasterCube:
     indices = np.where(mask)[0]
 
     if len(indices) == 0:
-        raise NoDataAvailable(
-            "No DGGS cells intersect the specified bounding box."
-        )
+        raise NoDataAvailable("No DGGS cells intersect the specified bounding box.")
 
     return data.isel(**{dggs_dim: indices})
 
@@ -357,9 +355,7 @@ def filter_spatial(data: RasterCube, geometries: dict) -> RasterCube:
 
     x_mask = (x_coords >= bounds[0]) & (x_coords <= bounds[2])
     y_mask = (y_coords >= bounds[1]) & (y_coords <= bounds[3])
-    bbox_sel = data.isel(
-        **{x_dim: np.where(x_mask)[0], y_dim: np.where(y_mask)[0]}
-    )
+    bbox_sel = data.isel(**{x_dim: np.where(x_mask)[0], y_dim: np.where(y_mask)[0]})
 
     xx, yy = np.meshgrid(
         np.asarray(bbox_sel[x_dim].data),
@@ -367,18 +363,12 @@ def filter_spatial(data: RasterCube, geometries: dict) -> RasterCube:
     )
     points = np.column_stack([xx.ravel(), yy.ravel()])
     point_geoms = [shapely.geometry.Point(p[0], p[1]) for p in points]
-    inside = np.array(
-        [union_geom.contains(p) for p in point_geoms]
-    ).reshape(xx.shape)
+    inside = np.array([union_geom.contains(p) for p in point_geoms]).reshape(xx.shape)
 
     if not inside.any():
-        raise NoDataAvailable(
-            "No pixels intersect the specified geometries."
-        )
+        raise NoDataAvailable("No pixels intersect the specified geometries.")
 
-    result = bbox_sel.where(
-        xr.DataArray(inside, dims=(y_dim, x_dim)), drop=True
-    )
+    result = bbox_sel.where(xr.DataArray(inside, dims=(y_dim, x_dim)), drop=True)
 
     return result
 
@@ -409,8 +399,7 @@ def _filter_spatial_dggs(data: RasterCube, geometries: dict) -> RasterCube:
 
     if "lon" not in data.coords or "lat" not in data.coords:
         raise DimensionNotAvailable(
-            "DGGS cube must have 'lat' and 'lon' coordinates "
-            "for filter_spatial."
+            "DGGS cube must have 'lat' and 'lon' coordinates " "for filter_spatial."
         )
 
     gdf = _load_geometries_dggs(geometries)
@@ -427,25 +416,25 @@ def _filter_spatial_dggs(data: RasterCube, geometries: dict) -> RasterCube:
 
     bounds = union_geom.bounds
     bbox_mask = (
-        (lon >= bounds[0]) & (lon <= bounds[2])
-        & (lat >= bounds[1]) & (lat <= bounds[3])
+        (lon >= bounds[0])
+        & (lon <= bounds[2])
+        & (lat >= bounds[1])
+        & (lat <= bounds[3])
     )
     bbox_indices = np.where(bbox_mask)[0]
 
     if len(bbox_indices) == 0:
-        raise NoDataAvailable(
-            "No DGGS cells intersect the specified geometries."
-        )
+        raise NoDataAvailable("No DGGS cells intersect the specified geometries.")
 
-    contained = np.array([
-        union_geom.contains(shapely.geometry.Point(lon[i], lat[i]))
-        for i in bbox_indices
-    ])
+    contained = np.array(
+        [
+            union_geom.contains(shapely.geometry.Point(lon[i], lat[i]))
+            for i in bbox_indices
+        ]
+    )
     final_indices = bbox_indices[contained]
 
     if len(final_indices) == 0:
-        raise NoDataAvailable(
-            "No DGGS cells intersect the specified geometries."
-        )
+        raise NoDataAvailable("No DGGS cells intersect the specified geometries.")
 
     return data.isel(**{dggs_dim: final_indices})

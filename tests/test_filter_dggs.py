@@ -72,9 +72,9 @@ class TestFilterBboxDggs:
     def test_preserves_dask_laziness(self, cube_dask, bbox_wgs84):
         result = filter_bbox(data=cube_dask, extent=bbox_wgs84)
         for var_name in result.data_vars:
-            assert isinstance(result[var_name].data, da.Array), (
-                f"Variable {var_name} lost dask backing"
-            )
+            assert isinstance(
+                result[var_name].data, da.Array
+            ), f"Variable {var_name} lost dask backing"
 
     def test_raises_on_no_cells(self, cube_numpy):
         from openeo_pg_parser_networkx.pg_schema import BoundingBox
@@ -88,7 +88,11 @@ class TestFilterBboxDggs:
     def test_planar_cube_unaffected(self, bounding_box, temporal_interval):
         from tests.mockdata import create_fake_rastercube
 
-        data = np.random.default_rng(42).integers(-100, 100, size=(30, 30, 30, 1)).astype(np.uint8)
+        data = (
+            np.random.default_rng(42)
+            .integers(-100, 100, size=(30, 30, 30, 1))
+            .astype(np.uint8)
+        )
         cube = create_fake_rastercube(
             data=data,
             spatial_extent=bounding_box,

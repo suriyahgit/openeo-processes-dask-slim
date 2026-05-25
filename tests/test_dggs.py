@@ -41,9 +41,9 @@ class TestDggsFixtures:
     def test_dask_cube_dask_backed(self, dggs_cube_dask):
         ds = dggs_cube_dask
         for var_name in ds.data_vars:
-            assert isinstance(ds[var_name].data, da.Array), (
-                f"Variable {var_name} is not dask-backed"
-            )
+            assert isinstance(
+                ds[var_name].data, da.Array
+            ), f"Variable {var_name} is not dask-backed"
 
     def test_cell_center_coords(self, dggs_cube_numpy):
         ds = dggs_cube_numpy
@@ -70,7 +70,11 @@ class TestIsDggsCube:
     def test_rejects_planar_cube(self, bounding_box, temporal_interval):
         from tests.mockdata import create_fake_rastercube
 
-        data = np.random.default_rng(42).integers(-100, 100, size=(30, 30, 30, 1)).astype(np.uint8)
+        data = (
+            np.random.default_rng(42)
+            .integers(-100, 100, size=(30, 30, 30, 1))
+            .astype(np.uint8)
+        )
         cube = create_fake_rastercube(
             data=data,
             spatial_extent=bounding_box,
@@ -166,7 +170,11 @@ class TestDggsAccessor:
     def test_planar_cube_unaffected(self, bounding_box, temporal_interval):
         from tests.mockdata import create_fake_rastercube
 
-        data = np.random.default_rng(42).integers(-100, 100, size=(30, 30, 30, 1)).astype(np.uint8)
+        data = (
+            np.random.default_rng(42)
+            .integers(-100, 100, size=(30, 30, 30, 1))
+            .astype(np.uint8)
+        )
         cube = create_fake_rastercube(
             data=data,
             spatial_extent=bounding_box,

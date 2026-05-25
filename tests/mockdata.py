@@ -96,9 +96,7 @@ def create_fake_healpix_cube(
     npix = ah.nside_to_npix(nside)
     healpix_indices = np.arange(npix)
 
-    lon_rad, lat_rad = ah.healpix_to_lonlat(
-        healpix_indices, nside, order="ring"
-    )
+    lon_rad, lat_rad = ah.healpix_to_lonlat(healpix_indices, nside, order="ring")
     lat_vals = np.rad2deg(np.asarray(lat_rad))
     lon_vals = np.rad2deg(np.asarray(lon_rad))
 

@@ -14,11 +14,7 @@ from openeo_processes_dask_slim.process_implementations.exceptions import (
 
 try:
     import astropy_healpix as ah
-    from astropy_healpix.high_level import (
-        neighbours,
-        nested_to_ring,
-        ring_to_nested,
-    )
+    from astropy_healpix.high_level import neighbours, nested_to_ring, ring_to_nested
 
     HAS_ASTROPY_HEALPIX = True
 except ImportError:
@@ -52,18 +48,12 @@ __all__ = [
 
 
 def _has_dggs_attrs(data: RasterCube) -> bool:
-    return (
-        DGGS_SYSTEM_ATTR in data.attrs
-        and DGGS_DIM_ATTR in data.attrs
-    )
+    return DGGS_SYSTEM_ATTR in data.attrs and DGGS_DIM_ATTR in data.attrs
 
 
 def _has_healpix_attrs(data: RasterCube) -> bool:
     crs = data.attrs.get("crs", "")
-    return (
-        "healpix_nside" in data.attrs
-        or str(crs).lower().startswith("healpix:")
-    )
+    return "healpix_nside" in data.attrs or str(crs).lower().startswith("healpix:")
 
 
 def _detect_dggs_dim_from_attrs(data: RasterCube) -> Optional[str]:
@@ -133,9 +123,7 @@ def require_dggs_cube(data: RasterCube) -> str:
         )
     dggs_dim = get_dggs_dim(data)
     if dggs_dim is None:
-        raise DimensionNotAvailable(
-            "No DGGS cell ID dimension found in the data cube."
-        )
+        raise DimensionNotAvailable("No DGGS cell ID dimension found in the data cube.")
     return dggs_dim
 
 
@@ -149,9 +137,7 @@ def filter_dggs(
     dggs_dim = require_dggs_cube(data)
 
     if cells is None and parent_cells is None:
-        raise ValueError(
-            "At least one of `cells` or `parent_cells` must be specified."
-        )
+        raise ValueError("At least one of `cells` or `parent_cells` must be specified.")
 
     selected = set()
 
@@ -186,7 +172,7 @@ def filter_dggs(
             )
 
         level_diff = int(np.log2(cube_nside // parent_nside))
-        scale = 4 ** level_diff
+        scale = 4**level_diff
 
         for parent_pix in parent_cells:
             start = int(parent_pix) * scale
@@ -290,9 +276,7 @@ def resample_dggs(
     coarse_npix = ah.nside_to_npix(resolution)
     coarse_indices = np.arange(coarse_npix)
 
-    lon_rad, lat_rad = ah.healpix_to_lonlat(
-        coarse_indices, resolution, order="ring"
-    )
+    lon_rad, lat_rad = ah.healpix_to_lonlat(coarse_indices, resolution, order="ring")
     lat_vals = np.rad2deg(np.asarray(lat_rad))
     lon_vals = np.rad2deg(np.asarray(lon_rad))
 
@@ -384,8 +368,12 @@ def dggs_to_raster(
         np.asarray(target_pixels).astype(int), dims="grid_index"
     )
 
-    valid = (flat_lon >= cube_lon.min()) & (flat_lon <= cube_lon.max()) & \
-            (flat_lat >= cube_lat.min()) & (flat_lat <= cube_lat.max())
+    valid = (
+        (flat_lon >= cube_lon.min())
+        & (flat_lon <= cube_lon.max())
+        & (flat_lat >= cube_lat.min())
+        & (flat_lat <= cube_lat.max())
+    )
 
     from astropy import units as u
 
@@ -401,16 +389,10 @@ def dggs_to_raster(
 
     result_vars = {}
     for var_name in data.data_vars:
-        selected = data[var_name].isel(
-            **{dggs_dim: flat_pixel_lookup}
-        )
+        selected = data[var_name].isel(**{dggs_dim: flat_pixel_lookup})
 
-        grid_y = xr.DataArray(
-            np.repeat(y_coords, len(x_coords)), dims="grid_index"
-        )
-        grid_x = xr.DataArray(
-            np.tile(x_coords, len(y_coords)), dims="grid_index"
-        )
+        grid_y = xr.DataArray(np.repeat(y_coords, len(x_coords)), dims="grid_index")
+        grid_x = xr.DataArray(np.tile(x_coords, len(y_coords)), dims="grid_index")
         selected = selected.assign_coords(grid_y=grid_y, grid_x=grid_x)
         selected = selected.set_index(grid_index=("grid_y", "grid_x"))
         unstacked = selected.unstack("grid_index")
@@ -440,13 +422,9 @@ def apply_neighborhood_dggs(
     dggs_dim = require_dggs_cube(data)
 
     if (k is None) == (radius is None):
-        raise ValueError(
-            "Exactly one of `k` or `radius` must be specified."
-        )
+        raise ValueError("Exactly one of `k` or `radius` must be specified.")
     if k is not None and (k < 1 or k > 4):
-        raise ValueError(
-            "Only k in range 1-4 is supported in v1."
-        )
+        raise ValueError("Only k in range 1-4 is supported in v1.")
     if radius is not None:
         raise NotImplementedError(
             "Angular radius neighborhoods are not yet implemented. Use `k` instead."
@@ -456,9 +434,7 @@ def apply_neighborhood_dggs(
             "apply_neighborhood_dggs is currently only implemented for HEALPix cubes."
         )
     if not HAS_ASTROPY_HEALPIX:
-        raise ImportError(
-            "astropy-healpix is required for apply_neighborhood_dggs."
-        )
+        raise ImportError("astropy-healpix is required for apply_neighborhood_dggs.")
 
     nside = get_dggs_resolution(data)
     if nside is None:
@@ -494,7 +470,7 @@ def apply_neighborhood_dggs(
     neighbor_matrix = np.full((n_pix, max_nbrs), -1, dtype=np.int64)
     for i, pix in enumerate(healpix_indices):
         nbrs = pixel_to_nbrs[int(pix)]
-        neighbor_matrix[i, :len(nbrs)] = nbrs
+        neighbor_matrix[i, : len(nbrs)] = nbrs
 
     positional_parameters = {"data": 0}
     named_parameters = {"context": context} if context is not None else {}
@@ -570,15 +546,20 @@ def mask_polygon_dggs(
 
     bounds = union_geom.bounds
     bbox_mask = (
-        (lon >= bounds[0]) & (lon <= bounds[2])
-        & (lat >= bounds[1]) & (lat <= bounds[3])
+        (lon >= bounds[0])
+        & (lon <= bounds[2])
+        & (lat >= bounds[1])
+        & (lat <= bounds[3])
     )
 
-    contained = np.array([
-        union_geom.contains(shapely.geometry.Point(lon[i], lat[i]))
-        if bbox_mask[i] else False
-        for i in range(len(lon))
-    ])
+    contained = np.array(
+        [
+            union_geom.contains(shapely.geometry.Point(lon[i], lat[i]))
+            if bbox_mask[i]
+            else False
+            for i in range(len(lon))
+        ]
+    )
 
     if not inside:
         cell_mask = xr.DataArray(contained, dims=(dggs_dim,))

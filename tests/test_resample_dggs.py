@@ -71,9 +71,9 @@ class TestResampleDggs:
     def test_preserves_dask(self, cube_n4_dask):
         result = resample_dggs(cube_n4_dask, resolution=2, reducer="mean")
         for var_name in result.data_vars:
-            assert isinstance(result[var_name].data, da.Array), (
-                f"Variable {var_name} lost dask backing"
-            )
+            assert isinstance(
+                result[var_name].data, da.Array
+            ), f"Variable {var_name} lost dask backing"
 
     def test_updated_lat_lon(self, cube_n4):
         result = resample_dggs(cube_n4, resolution=2, reducer="mean")
@@ -107,9 +107,9 @@ class TestDggsToRaster:
     def test_preserves_dask(self, cube_n4_dask):
         result = dggs_to_raster(cube_n4_dask, resolution=10.0)
         for var_name in result.data_vars:
-            assert isinstance(result[var_name].data, da.Array), (
-                f"Variable {var_name} lost dask backing"
-            )
+            assert isinstance(
+                result[var_name].data, da.Array
+            ), f"Variable {var_name} lost dask backing"
 
     def test_unsupported_method(self, cube_n4):
         with pytest.raises(ValueError):

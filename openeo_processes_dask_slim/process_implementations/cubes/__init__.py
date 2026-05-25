@@ -2,8 +2,8 @@ from ._filter import *
 from .aggregate import *
 from .apply import *
 from .apply_neighborhood_intertwin import *
-from .general import *
 from .dggs import *
+from .general import *
 from .indices import *
 from .mask import *
 from .merge import *

@@ -26,24 +26,28 @@ class TestApplyNeighborhoodDggs:
     def test_requires_k_or_radius(self, cube_n2):
         def dummy(data, **kwargs):
             return np.mean(data)
+
         with pytest.raises(ValueError):
             apply_neighborhood_dggs(cube_n2, dummy)
 
     def test_k_1_returns_same_shape(self, cube_n2):
         def _mean(data, **kwargs):
             return np.mean(data)
+
         result = apply_neighborhood_dggs(cube_n2, _mean, k=1)
         assert len(result.healpix_index) == len(cube_n2.healpix_index)
 
     def test_k_1_preserves_temporal(self, cube_n2):
         def _mean(data, **kwargs):
             return np.mean(data)
+
         result = apply_neighborhood_dggs(cube_n2, _mean, k=1)
         assert result.dims["t"] == cube_n2.dims["t"]
 
     def test_k_1_preserves_bands(self, cube_n2):
         def _mean(data, **kwargs):
             return np.mean(data)
+
         result = apply_neighborhood_dggs(cube_n2, _mean, k=1)
         for var in cube_n2.data_vars:
             assert var in result.data_vars
@@ -51,34 +55,35 @@ class TestApplyNeighborhoodDggs:
     def test_k_1_values_different(self, cube_n2):
         def _mean(data, **kwargs):
             return np.mean(data)
+
         result = apply_neighborhood_dggs(cube_n2, _mean, k=1)
-        assert not np.allclose(
-            result["band_0"].values, cube_n2["band_0"].values
-        )
+        assert not np.allclose(result["band_0"].values, cube_n2["band_0"].values)
 
     def test_include_center_false(self, cube_n2):
         def _sum(data, **kwargs):
             return np.sum(data)
-        result = apply_neighborhood_dggs(
-            cube_n2, _sum, k=1, include_center=False
-        )
+
+        result = apply_neighborhood_dggs(cube_n2, _sum, k=1, include_center=False)
         assert len(result.healpix_index) == len(cube_n2.healpix_index)
 
     def test_k_2_works(self, cube_n2):
         def _mean(data, **kwargs):
             return np.mean(data)
+
         result = apply_neighborhood_dggs(cube_n2, _mean, k=2)
         assert len(result.healpix_index) == len(cube_n2.healpix_index)
 
     def test_k_greater_than_4_rejected(self, cube_n2):
         def dummy(data, **kwargs):
             return np.mean(data)
+
         with pytest.raises(ValueError):
             apply_neighborhood_dggs(cube_n2, dummy, k=5)
 
     def test_radius_not_implemented(self, cube_n2):
         def dummy(data, **kwargs):
             return np.mean(data)
+
         with pytest.raises(NotImplementedError):
             apply_neighborhood_dggs(cube_n2, dummy, radius=10.0)
 
@@ -87,6 +92,7 @@ class TestApplyNeighborhoodDggs:
             if context is not None and "weights" in context:
                 return np.average(data, weights=context["weights"])
             return np.mean(data)
+
         result = apply_neighborhood_dggs(
             cube_n2, _weighted_mean, k=1, context={"weights": [1, 1, 1, 1, 1, 1, 1, 1]}
         )

@@ -13,6 +13,10 @@ import xvec
 from joblib import Parallel, delayed
 from openeo_pg_parser_networkx.pg_schema import TemporalInterval, TemporalIntervals
 
+from openeo_processes_dask_slim.process_implementations.cubes.dggs import (
+    get_dggs_dim,
+    is_dggs_cube,
+)
 from openeo_processes_dask_slim.process_implementations.data_model import (
     RasterCube,
     VectorCube,
@@ -20,11 +24,6 @@ from openeo_processes_dask_slim.process_implementations.data_model import (
 from openeo_processes_dask_slim.process_implementations.exceptions import (
     DimensionNotAvailable,
     TooManyDimensions,
-)
-
-from openeo_processes_dask_slim.process_implementations.cubes.dggs import (
-    get_dggs_dim,
-    is_dggs_cube,
 )
 
 __all__ = ["aggregate_temporal", "aggregate_temporal_period", "aggregate_spatial"]
@@ -309,18 +308,22 @@ def _aggregate_spatial_dggs(
 
         bounds = geom.bounds
         bbox_mask = (
-            (lon >= bounds[0]) & (lon <= bounds[2])
-            & (lat >= bounds[1]) & (lat <= bounds[3])
+            (lon >= bounds[0])
+            & (lon <= bounds[2])
+            & (lat >= bounds[1])
+            & (lat <= bounds[3])
         )
         bbox_indices = np.where(bbox_mask)[0]
 
         if len(bbox_indices) == 0:
             continue
 
-        contained = np.array([
-            geom.contains(shapely.geometry.Point(lon[i], lat[i]))
-            for i in bbox_indices
-        ])
+        contained = np.array(
+            [
+                geom.contains(shapely.geometry.Point(lon[i], lat[i]))
+                for i in bbox_indices
+            ]
+        )
         cell_indices = bbox_indices[contained]
 
         if len(cell_indices) == 0:
